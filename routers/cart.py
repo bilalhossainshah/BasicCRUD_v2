@@ -1,50 +1,72 @@
 from fastapi import APIRouter
 from database import get_conn
 
-router = APIRouter(prefix="/cart" , tags=["Cart"])
+router = APIRouter(prefix="/cart", tags=["Cart"])
 
 @router.get("/Orders")
-def get_orders(user_id:int):
+def get_orders(user_id: int):
     conn = get_conn()
     cursor = conn.cursor()
     cursor.execute(
         """
-        Select cart.id,Users.username,Products.description,Products.price,cart.oreder_time
-        from cart
-        JOIN Users ON cart.user_id = Users.id
-        JOIN Products ON cart.product_id = Products.id
-        where cart.user_id = ?
-        """,(user_id,)
+        SELECT Cart.id, Users.username, Products.description, Products.price, Cart.oreder_time
+        FROM Cart
+        JOIN Users ON Cart.user_id = Users.id
+        JOIN Products ON Cart.product_id = Products.id
+        WHERE Cart.user_id = ?
+        """,
+        (user_id,)
     )
     orders = cursor.fetchall()
-
-    cursor.execute("""
-    select SUM(Products.price) as total_price
-    from cart
-    join products on cart.product_id = Products.id
-    where cart.user_id = ?
-""",(user_id,))
-    total = cursor.fetchone()
     conn.close()
+
     return {
-        "orders": [dict(row) for row in orders],
-        "total_price": total["total_price"] if total["total_price"] else 0
-        }
+        "orders": [dict(row) for row in orders]
+    }
 
 @router.post("/order")
-def create_order( user_id:int, product_id:int):
+def create_order(user_id: int, product_id: int):
     conn = get_conn()
     cursor = conn.cursor()
-  
-    cursor.execute("insert into Cart (user_id,product_id) values(?,?)",(user_id,product_id))
+    cursor.execute(
+        "INSERT INTO Cart (user_id, product_id) VALUES (?, ?)",
+        (user_id, product_id)
+    )
     conn.commit()
     conn.close()
-    return{"message":"Order Added successfully"}
+    return {"message": "Order added successfully"}
 
-@router.get("/Grand_Total")
-def get_total(use):
+@router.post("/Checkout")
+def checkout(user_id: int):
     conn = get_conn()
     cursor = conn.cursor()
 
-    
-    
+    cursor.execute("""
+        SELECT Cart.id, Products.name, Products.price, Cart.oreder_time
+        FROM Cart
+        JOIN Products ON Cart.product_id = Products.id
+        WHERE Cart.user_id = ?
+    """, (user_id,))
+    items = cursor.fetchall()
+
+    if not items:
+        conn.close()
+        return {"message": "No items in cart for this user."}
+
+    total_price = sum(item["price"] for item in items)
+
+    cursor.execute("""
+        INSERT INTO Orders (user_id, total_price)
+        VALUES (?, ?)
+    """, (user_id, total_price))
+
+    cursor.execute("DELETE FROM Cart WHERE user_id = ?", (user_id,))
+
+    conn.commit()
+    conn.close()
+
+    return {
+        "message": "Checkout successful!",
+        "total_price": total_price,
+        "items": [dict(item) for item in items]
+    }

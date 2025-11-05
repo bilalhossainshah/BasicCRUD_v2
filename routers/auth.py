@@ -71,7 +71,43 @@
 #         raise HTTPException(status_code=402,detail="Invalid Credentials")
 #     access_token = create_access_token({"sub": db_user.email})
 #     return {"access_token":access_token,"token_type":"bearer"}
->>>>>>> 505d644 (code just .db or product,catagories wli file mn h)
+import os, hashlib
+from fastapi import APIRouter
+from database import get_conn
+
+router = APIRouter(prefix="/auth", tags=["Auth"])
+
+@router.post("/register")
+def register_user(username: str, password: str):
+    conn = get_conn()
+    cursor = conn.cursor()
+
+    salt = os.urandom(16)
+    hashed_pw = hashlib.sha256(salt + password.encode()).hexdigest()
+
+    cursor.execute("INSERT INTO Users (username, salt, password) VALUES (?, ?, ?)",
+                   (username, salt.hex(), hashed_pw))
+    conn.commit()
+    conn.close()
+    return {"message": "User Added Successfully"}
 
 
+@router.post("/login")
+def login(username: str, password: str):
+    conn = get_conn()
+    cursor = conn.cursor()
+    cursor.execute("SELECT salt, password FROM Users WHERE username = ?", (username,))
+    result = cursor.fetchone()
+    conn.close()
 
+    if not result:
+        return {"message": "User Doesn't Exist"}
+
+    salt_hex, stored_password = result
+    salt = bytes.fromhex(salt_hex)  
+    hashed_input = hashlib.sha256(salt + password.encode()).hexdigest()
+
+    if hashed_input == stored_password:
+        return {"message": "Login Successful"}
+    else:
+        return {"message": "Invalid Credentials"}
