@@ -28,10 +28,22 @@ def get_orders(user_id: int):
 def create_order(user_id: int, product_id: int):
     conn = get_conn()
     cursor = conn.cursor()
+    cursor.execute(" Select stock from Products where id = ?" ,(product_id,) )
+    stock = cursor.fetchone()
+    if not stock or stock[0]<=0:
+        conn.close()
+        return{"Message": "Product outof Stock!"}
+    
+
     cursor.execute(
         "INSERT INTO Cart (user_id, product_id) VALUES (?, ?)",
         (user_id, product_id)
     )
+    cursor.execute("""
+    Update Products
+    Set stock = stock-1
+    Where id =? and stock > 0
+    """,(product_id,))
     conn.commit()
     conn.close()
     return {"message": "Order added successfully"}
